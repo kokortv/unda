@@ -5,7 +5,7 @@ const CARD_DEPART_DELAY = 340;
 const UNDO_TIMEOUT = 5000;
 const READ_SYNC_TIMEOUT_MS = 30000;
 const WRITE_SYNC_TIMEOUT_MS = 30000;
-const APP_VERSION = "147";
+const APP_VERSION = "148";
 const MAX_NAME_LENGTH = 80;
 const MAX_QUANTITY_LENGTH = 40;
 const MAX_NOTE_LENGTH = 500;
@@ -60,6 +60,7 @@ const dom = {
   empty: document.querySelector("#empty-state"),
   status: document.querySelector("#status-text"),
   syncStatus: document.querySelector("#sync-status"),
+  syncQueueBadge: document.querySelector("#sync-queue-badge"),
   sync: document.querySelector("#sync-button"),
   clear: document.querySelector("#clear-button"),
   share: document.querySelector("#share-button"),
@@ -1192,6 +1193,11 @@ function setSyncStatus(status) {
     text.textContent = fullMessage;
   } else {
     dom.syncStatus.textContent = fullMessage;
+  }
+  if (dom.syncQueueBadge) {
+    dom.syncQueueBadge.hidden = queued <= 0;
+    dom.syncQueueBadge.textContent = queued > 99 ? "99+" : String(queued);
+    dom.syncQueueBadge.setAttribute("aria-hidden", "true");
   }
   dom.syncStatus.className = `sync-status is-${status}`;
   dom.sync.className = `icon-button is-${status}`;

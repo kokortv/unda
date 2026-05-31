@@ -1,4 +1,4 @@
-const CACHE_NAME = "unda-pwa-v147";
+const CACHE_NAME = "unda-pwa-v148";
 const ASSETS = [
   "./",
   "./index.html",

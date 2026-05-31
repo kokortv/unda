@@ -1647,6 +1647,7 @@ h1 {
 }
 
 .sync-status {
+  --sync-mark: var(--accent-ink);
   top: 4px;
   right: -31px;
   width: 24px;
@@ -1671,7 +1672,7 @@ h1 {
   display: block;
   width: 24px;
   height: 24px;
-  color: var(--accent-ink);
+  color: var(--sync-mark);
   fill: none;
   stroke: currentColor;
   stroke-width: 2.25;
@@ -1691,7 +1692,7 @@ h1 {
   place-items: center;
   border: 1px solid var(--bg);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent-ink) 76%, black);
+  background: color-mix(in srgb, var(--sync-mark) 78%, black);
   color: white;
   font-size: 0.52rem;
   font-weight: 760;
@@ -1705,18 +1706,24 @@ h1 {
 }
 
 .sync-status.is-syncing .sync-icon {
-  color: var(--important);
   animation: sync-fade 950ms ease-in-out infinite;
 }
 
-.sync-status.is-offline .sync-icon,
-.sync-status.is-error .sync-icon,
-.sync-status.is-queued .sync-icon {
-  color: var(--danger);
+.sync-status.is-syncing {
+  --sync-mark: var(--important);
 }
 
-.sync-status.is-queued .sync-icon {
-  color: var(--important);
+.sync-status.is-syncing .sync-queue-badge {
+  animation: sync-fade 950ms ease-in-out infinite;
+}
+
+.sync-status.is-offline,
+.sync-status.is-error {
+  --sync-mark: var(--danger);
+}
+
+.sync-status.is-queued {
+  --sync-mark: var(--important);
 }
 
 .icon-button {

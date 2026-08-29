@@ -5,7 +5,7 @@ const CARD_DEPART_DELAY = 340;
 const UNDO_TIMEOUT = 5000;
 const READ_SYNC_TIMEOUT_MS = 30000;
 const WRITE_SYNC_TIMEOUT_MS = 30000;
-const APP_VERSION = "149";
+const APP_VERSION = "150";
 const MAX_NAME_LENGTH = 80;
 const MAX_QUANTITY_LENGTH = 40;
 const MAX_NOTE_LENGTH = 500;
@@ -43,7 +43,8 @@ const state = {
   brandPressTimer: 0,
   localRevision: 0,
   bootstrapSerial: 0,
-  serverVersion: ""
+  serverVersion: "",
+  flushedBootstrapData: null
 };
 
 const device = buildDeviceInfo();
@@ -692,6 +693,37 @@ function isNetworkError(error) {
   return !navigator.onLine || error instanceof TypeError || error?.name === "AbortError";
 }
 
+function isUnsupportedBatchError(error) {
+  return /Unknown action:\s*batchMutations/i.test(error?.message || "");
+}
+
+function clearMutationsById(ids) {
+  const idSet = new Set(ids);
+  writeQueuedMutations(readQueuedMutations().filter((entry) => !idSet.has(entry.id)));
+}
+
+async function flushQueuedMutationsBatch(queue) {
+  const data = await api.request("batchMutations", { mutations: queue });
+  const failed = Array.isArray(data.failed) ? data.failed : [];
+  const failedIds = new Set(failed.map((entry) => entry.id).filter(Boolean));
+  const appliedIds = Array.isArray(data.appliedIds)
+    ? data.appliedIds
+    : queue.map((entry) => entry.id).filter((id) => !failedIds.has(id));
+
+  clearMutationsById(appliedIds);
+
+  for (const failedEntry of failed) {
+    const original = queue.find((entry) => entry.id === failedEntry.id);
+    if (original) {
+      storeFailedMutation(original, new Error(failedEntry.error || "Sync failed"));
+      removeQueuedMutation(original.id);
+    }
+  }
+
+  state.flushedBootstrapData = data;
+  return failed.length;
+}
+
 async function flushQueuedMutations() {
   if (!api.enabled || !navigator.onLine || state.pendingMutations > 0 || state.isFlushing) return false;
   if (!readQueuedMutations().length) return true;
@@ -701,6 +733,31 @@ async function flushQueuedMutations() {
   let flushed = false;
   let failedCount = 0;
   try {
+    const queueSnapshot = readQueuedMutations();
+    const skippedIds = queueSnapshot
+      .filter((entry) => (entry.action === "clearItems" || entry.action === "clearBoughtItems") && !hasScopedIds(entry.payload))
+      .map((entry) => entry.id);
+    if (skippedIds.length) clearMutationsById(skippedIds);
+
+    const batchQueue = queueSnapshot.filter((entry) => !skippedIds.includes(entry.id));
+    if (batchQueue.length > 1) {
+      try {
+        failedCount = await flushQueuedMutationsBatch(batchQueue);
+        flushed = true;
+        setSyncStatus(failedCount > 0 ? "error" : "idle");
+        if (failedCount > 0) setStatus(t("syncPartial"));
+        return true;
+      } catch (error) {
+        if (isNetworkError(error)) {
+          setSyncStatus("queued");
+          return false;
+        }
+        if (!isUnsupportedBatchError(error)) {
+          storeFailedMutation(createQueuedMutation("batchMutations", { count: batchQueue.length }), error);
+        }
+      }
+    }
+
     while (true) {
       const entry = readQueuedMutations()[0];
       if (!entry) break;
@@ -1646,7 +1703,8 @@ async function bootstrap(options = {}) {
   if (options.silent && (state.pendingMutations > 0 || state.pendingUndo > 0)) return;
   if (!options.silent) setStatus(t("loadingSync"));
   try {
-    const data = await withSync(api.request("bootstrap"));
+    const data = state.flushedBootstrapData || await withSync(api.request("bootstrap"));
+    state.flushedBootstrapData = null;
     if (requestSerial !== state.bootstrapSerial) return;
     window.clearTimeout(state.bootstrapRetryTimer);
     if (state.pendingMutations > 0 || state.pendingUndo > 0 || readQueuedMutations().length > 0 || state.localRevision !== revisionAtStart) {
